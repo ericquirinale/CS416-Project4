@@ -27,7 +27,7 @@ char diskfile_path[PATH_MAX];
 // Declare your in-memory data structures here
 char* inode_bm;
 char* data_bm;
-struct superblock sb;
+struct superblock* sb;
 int init=0;
 
 
@@ -105,7 +105,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	// Step 1: Read dir_inode's data block and check each directory entry of dir_inode
 	
 	// Step 2: Check if fname (directory name) is already used in other entries
-
+	
 	// Step 3: Add directory entry in dir_inode's data block and write to disk
 
 	// Allocate a new data block for this directory if it does not exist
@@ -143,18 +143,37 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
  * Make file system
  */
 int tfs_mkfs() {
+	init = 1;
 
 	// Call dev_init() to initialize (Create) Diskfile
-
+	dev_init(diskfile_path);
+	
 	// write superblock information
+	sb = malloc(sizeof(superblock));
+	sb->magic_num = MAGIC_NUM;
+	sb->max_inum = MAX_INUM;
+	sb->max_dnum = MAX_DNUM;
 
 	// initialize inode bitmap
+	inode_bm = malloc(sizeof(char)*MAX_INUM/8.0);
 
 	// initialize data block bitmap
+	data_bm = malloc(sizeof(char)*MAX_DNUM/8.0);
 
 	// update bitmap information for root directory
+	memset(inode_bm, 0, MAX_INUM/8.0);
+	memset(data_bm, 0, MAX_DNUM/8.0);
 
 	// update inode for root directory
+	struct inode* sb_node = malloc(sizeof(struct inode));
+	sb_node->ino = 0;
+	sb_node->valid = 1;
+	sb_node->size=sizeof(struct superblock);
+	sb_node->type = 2; //2 for superblock
+	sb_node->link = 0;
+	biowrite(0,(void*)(sb_node));
+	biowrite(1,(void*)(inode_bm));
+	biowrite(2,(void*)(data_bm));
 
 	return 0;
 }
@@ -167,8 +186,8 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 
 	// Step 1a: If disk file is not found, call mkfs
 
-  // Step 1b: If disk file is found, just initialize in-memory data structures
-  // and read superblock from disk
+	// Step 1b: If disk file is found, just initialize in-memory data structures
+	// and read superblock from disk
 
 	return NULL;
 }
