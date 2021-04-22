@@ -33,9 +33,16 @@ int init=0;
 
 /* 
  * Get available inode number from bitmap
+ * Returns -1 if no empty spot found
+
  */
 int get_avail_ino() {
-
+	for(int i=0;i<(sb->max_inum)*8;i++){
+		if(get_bitmap(inode_bm,i)){
+			//Idk if we should update the bitmap here
+			return i;
+		}
+	}
 	// Step 1: Read inode bitmap from disk
 	
 	// Step 2: Traverse inode bitmap to find an available slot
@@ -47,16 +54,22 @@ int get_avail_ino() {
 
 /* 
  * Get available data block number from bitmap
+ * Returns -1 if no empty spot found
  */
 int get_avail_blkno() {
-
+	for(int i=0;i<(sb->max_dnum)*8;i++){
+		if(get_bitmap(data_bm,i)){
+			//Idk if we should update the bitmap here
+			return i;
+		}
+	}
 	// Step 1: Read data block bitmap from disk
 	
 	// Step 2: Traverse data block bitmap to find an available slot
 
 	// Step 3: Update data block bitmap and write to disk 
 
-	return 0;
+	return -1;
 }
 
 /* 
