@@ -149,7 +149,7 @@ int tfs_mkfs() {
 	dev_init(diskfile_path);
 	
 	// write superblock information
-	sb = malloc(sizeof(superblock));
+	sb = malloc(sizeof(struct superblock));
 	sb->magic_num = MAGIC_NUM;
 	sb->max_inum = MAX_INUM;
 	sb->max_dnum = MAX_DNUM;
