@@ -208,7 +208,7 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 		sb=(sb_node->direct_ptr[0]);
 	}
 
-	dev_close(
+	dev_close();
 
 
 
