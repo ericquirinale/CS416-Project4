@@ -25,8 +25,8 @@
 char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
-char* inode_bm;
-char* data_bm;
+bitmap_t inode_bm;
+bitmap_t data_bm;
 struct superblock* sb;
 int init=0;
 
@@ -170,6 +170,9 @@ int tfs_mkfs() {
 	sb_node->valid = 1;
 	sb_node->size=sizeof(struct superblock);
 	sb_node->type = 2; //2 for superblock
+	sb_node->direct_ptr[0]=&sb;//HAVE TO FIX/CHECK THIS LINE
+	//Also, I think we need to create node structures for the bitmaps 
+	//cuz the biowrite datablock is a standard size
 	sb_node->link = 0;
 	biowrite(0,(void*)(sb_node));
 	biowrite(1,(void*)(inode_bm));
@@ -185,6 +188,29 @@ int tfs_mkfs() {
 static void *tfs_init(struct fuse_conn_info *conn) {
 
 	// Step 1a: If disk file is not found, call mkfs
+	int open=dev_open(diskfile_path);
+	if(open==-1){
+		tfs_mkfs();
+	}
+	else{
+		struct inode* sb_node;
+		struct inode* data_bm_node;
+		struct inode* inode_bm_node;
+		int sb_success=bioread(0,sb_node);
+		int inode_success=bioread(1,inode_bm_node);
+		int data_success=bioread(2,data_bm_node);
+		if(sb_success<0||inode_success<0||data_success<0){
+			printf("Couldn't find superblock or bitmap nodes\n");
+			return;
+		}
+		inode_bm=(inode_bm_node->direct_ptr[0]);
+		data_bm=(data_bm_node->direct_ptr[0]);
+		sb=(sb_node->direct_ptr[0]);
+	}
+
+	dev_close(
+
+
 
 	// Step 1b: If disk file is found, just initialize in-memory data structures
 	// and read superblock from disk
