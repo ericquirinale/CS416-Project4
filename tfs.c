@@ -29,7 +29,8 @@ bitmap_t inode_bm;
 bitmap_t data_bm;
 struct superblock* sb;
 int init=0;
-
+int inodes_per_block=(int)(BLOCK_SIZE/sizeof(struct inode));
+int inode_start_block=3;
 
 /* 
  * Get available inode number from bitmap
@@ -78,10 +79,18 @@ int get_avail_blkno() {
 int readi(uint16_t ino, struct inode *inode) {
 
   // Step 1: Get the inode's on-disk block number
+	int onDiskBM=(ino/inodes_per_block)+inode_start_block;
 
   // Step 2: Get offset of the inode in the inode on-disk block
+	int offset=ino%inodes_per_block;
 
   // Step 3: Read the block from disk and then copy into inode structure
+
+	void* data=malloc(sizeof(BLOCK_SIZE));
+	bio_read(onDiskBM,data);
+	inode=malloc(sizeof(struct inode));
+	memcpy(inode,data+offset,sizeof(struct inode));
+	free(data);
 
 	return 0;
 }
@@ -89,11 +98,17 @@ int readi(uint16_t ino, struct inode *inode) {
 int writei(uint16_t ino, struct inode *inode) {
 
 	// Step 1: Get the block number where this inode resides on disk
-	
+	int onDiskBM=(ino/inodes_per_block)+inode_start_block;
+
 	// Step 2: Get the offset in the block where this inode resides on disk
+	int offset=ino%inodes_per_block;
 
 	// Step 3: Write inode to disk 
-
+	void* data=malloc(sizeof(BLOCK_SIZE));
+	bio_read(onDiskBM,data);
+	memcpy(data+offset,inode,sizeof(struct inode));
+	bio_write(onDiskBM,data);
+	//free(inode);?
 	return 0;
 }
 
@@ -160,7 +175,7 @@ int tfs_mkfs() {
 
 	// Call dev_init() to initialize (Create) Diskfile
 	dev_init(diskfile_path);
-	
+	dev_open(diskfile_path);
 	// write superblock information
 	sb = malloc(sizeof(struct superblock));
 	sb->magic_num = MAGIC_NUM;
@@ -178,18 +193,24 @@ int tfs_mkfs() {
 	memset(data_bm, 0, MAX_DNUM/8.0);
 
 	// update inode for root directory
-	struct inode* sb_node = malloc(sizeof(struct inode));
-	sb_node->ino = 0;
-	sb_node->valid = 1;
-	sb_node->size=sizeof(struct superblock);
-	sb_node->type = 2; //2 for superblock
-	sb_node->direct_ptr[0]=&sb;//HAVE TO FIX/CHECK THIS LINE
+
 	//Also, I think we need to create node structures for the bitmaps 
 	//cuz the biowrite datablock is a standard size
-	sb_node->link = 0;
-	biowrite(0,(void*)(sb_node));
-	biowrite(1,(void*)(inode_bm));
-	biowrite(2,(void*)(data_bm));
+	
+	struct stat* vstat=malloc(sizeof(struct stat));
+	vstat->st_mode= S_IFDIR |0755;
+	time(& vstat->st_mtime);
+
+	struct inode* root_inode=malloc(sizeof(struct inode));
+	root_inode->ino=4;
+	root_inode->valid=1;
+	root_inode->type=1;
+	root_inode->link=2;
+	root_inode->vstat=*vstat;	
+	bio_write(0,(void*)(sb));
+	bio_write(1,(void*)(inode_bm));
+	bio_write(2,(void*)(data_bm));
+	bio_write(4,(void*)(root_inode));
 
 	return 0;
 }
@@ -199,29 +220,31 @@ int tfs_mkfs() {
  * FUSE file operations
  */
 static void *tfs_init(struct fuse_conn_info *conn) {
-
+	printf("Init\n");
 	// Step 1a: If disk file is not found, call mkfs
 	int open=dev_open(diskfile_path);
 	if(open==-1){
 		tfs_mkfs();
 	}
 	else{
-		struct inode* sb_node;
-		struct inode* data_bm_node;
-		struct inode* inode_bm_node;
-		int sb_success=bioread(0,sb_node);
-		int inode_success=bioread(1,inode_bm_node);
-		int data_success=bioread(2,data_bm_node);
-		if(sb_success<0||inode_success<0||data_success<0){
+		sb= (struct superblock*) malloc(sizeof(BLOCK_SIZE));
+		int sb_success=bio_read(0,sb);
+		// int inode_success=bio_read(1,inode_bm_node);
+		// int data_success=bio_read(2,data_bm_node);
+		// if(sb_success<0||inode_success<0||data_success<0){
+		// 	printf("Couldn't find superblock or bitmap nodes\n");
+		// 	return;
+		// }
+		if(sb_success<0){
 			printf("Couldn't find superblock or bitmap nodes\n");
 			return;
 		}
-		inode_bm=(inode_bm_node->direct_ptr[0]);
-		data_bm=(data_bm_node->direct_ptr[0]);
-		sb=(sb_node->direct_ptr[0]);
+		// inode_bm=(inode_bm_node->direct_ptr[0]);
+		// data_bm=(data_bm_node->direct_ptr[0]);
+		// sb=(sb_node->direct_ptr[0]);
+		printf("%d\n",sb->max_inum);
+		// dev_close();
 	}
-
-	dev_close();
 
 
 
@@ -242,9 +265,8 @@ static void tfs_destroy(void *userdata) {
 static int tfs_getattr(const char *path, struct stat *stbuf) {
 
 	// Step 1: call get_node_by_path() to get inode from path
-
 	// Step 2: fill attribute of file into stbuf from inode
-
+	return -1;
 		stbuf->st_mode   = S_IFDIR | 0755;
 		stbuf->st_nlink  = 2;
 		time(&stbuf->st_mtime);
@@ -272,7 +294,7 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 
 
 static int tfs_mkdir(const char *path, mode_t mode) {
-
+	tfs_init(NULL);
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
