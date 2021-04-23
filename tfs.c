@@ -6,7 +6,6 @@
  */
 
 #define FUSE_USE_VERSION 26
-
 #include <fuse.h>
 #include <stdlib.h>
 #include <stdio.h>
@@ -25,10 +24,14 @@
 char diskfile_path[PATH_MAX];
 
 // Declare your in-memory data structures here
+#define FILE 0
+#define DIRECTORY 1
+#define SUPERBLOCK 2 
+
+
 bitmap_t inode_bm;
 bitmap_t data_bm;
 struct superblock* sb;
-int init=0;
 int inodes_per_block=(int)(BLOCK_SIZE/sizeof(struct inode));
 int inode_start_block=3;
 
@@ -91,7 +94,6 @@ int readi(uint16_t ino, struct inode *inode) {
 	inode=malloc(sizeof(struct inode));
 	memcpy(inode,data+offset,sizeof(struct inode));
 	free(data);
-
 	return 0;
 }
 
@@ -160,7 +162,21 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
  * namei operation
  */
 int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
+	// if(path[0]!= '/'){
+	// 	printf("Invalid path\n");
+	// 	return -1;
+	// }
 	
+	char* name=malloc(256);
+	name=strtok(path,"/");
+	//Splits the path up into names
+	while(name!=NULL){
+
+
+		name=strtok(NULL,"/");
+	}
+	readi(0,inode);
+	printf("fjdskal;fdjsafkl;dasj;f\n");
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
 
@@ -171,7 +187,6 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
  * Make file system
  */
 int tfs_mkfs() {
-	init = 1;
 
 	// Call dev_init() to initialize (Create) Diskfile
 	dev_init(diskfile_path);
@@ -181,7 +196,10 @@ int tfs_mkfs() {
 	sb->magic_num = MAGIC_NUM;
 	sb->max_inum = MAX_INUM;
 	sb->max_dnum = MAX_DNUM;
-
+	sb->i_bitmap_blk=1;
+	sb->d_bitmap_blk=2;
+	sb->i_start_blk=3;
+	printf("SBMAXINUM IN MKFS%d\n",sb->max_inum);
 	// initialize inode bitmap
 	inode_bm = malloc(sizeof(char)*MAX_INUM/8.0);
 
@@ -193,25 +211,22 @@ int tfs_mkfs() {
 	memset(data_bm, 0, MAX_DNUM/8.0);
 
 	// update inode for root directory
-
-	//Also, I think we need to create node structures for the bitmaps 
-	//cuz the biowrite datablock is a standard size
 	
 	struct stat* vstat=malloc(sizeof(struct stat));
 	vstat->st_mode= S_IFDIR |0755;
 	time(& vstat->st_mtime);
 
 	struct inode* root_inode=malloc(sizeof(struct inode));
-	root_inode->ino=4;
+	root_inode->ino=0;
 	root_inode->valid=1;
-	root_inode->type=1;
+	root_inode->type=DIRECTORY;
 	root_inode->link=2;
 	root_inode->vstat=*vstat;	
 	bio_write(0,(void*)(sb));
 	bio_write(1,(void*)(inode_bm));
 	bio_write(2,(void*)(data_bm));
-	bio_write(4,(void*)(root_inode));
-
+	// bio_write(4,(void*)(root_inode));
+	writei(0,root_inode);
 	return 0;
 }
 
@@ -223,12 +238,18 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 	printf("Init\n");
 	// Step 1a: If disk file is not found, call mkfs
 	int open=dev_open(diskfile_path);
+	printf("OPEN:%d\n",open);
 	if(open==-1){
 		tfs_mkfs();
 	}
 	else{
 		sb= (struct superblock*) malloc(sizeof(BLOCK_SIZE));
+		inode_bm=malloc(sizeof(sizeof(char)*MAX_INUM/8.0));
+		data_bm=malloc(sizeof(sizeof(char)*MAX_DNUM/8.0));
 		int sb_success=bio_read(0,sb);
+		int inode_success=bio_read(1,inode_bm);
+		int data_success=bio_read(2,data_bm);
+		
 		// int inode_success=bio_read(1,inode_bm_node);
 		// int data_success=bio_read(2,data_bm_node);
 		// if(sb_success<0||inode_success<0||data_success<0){
@@ -257,30 +278,44 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 static void tfs_destroy(void *userdata) {
 
 	// Step 1: De-allocate in-memory data structures
-
+	dev_close();
 	// Step 2: Close diskfile
 
 }
 
 static int tfs_getattr(const char *path, struct stat *stbuf) {
-
-	// Step 1: call get_node_by_path() to get inode from path
-	// Step 2: fill attribute of file into stbuf from inode
 	return -1;
-		stbuf->st_mode   = S_IFDIR | 0755;
-		stbuf->st_nlink  = 2;
-		time(&stbuf->st_mtime);
+	printf("testfdsakjfldsajfk;ldasjf;kla\n");
+	// Step 1: call get_node_by_path() to get inode from path
+	struct inode* inode=malloc(sizeof(struct inode));
+	get_node_by_path(path,0,inode);
 
+	stbuf->st_mode=inode->vstat.st_mode;
+	stbuf->st_nlink=inode->link;
+	stbuf->st_size=inode->size;
+	stbuf->st_ino=inode->ino;
+	stbuf->st_uid=getuid();
+	stbuf->st_gid=getgid();
+	stbuf->st_mtime=inode->vstat.st_mtime;
+	// Step 2: fill attribute of file into stbuf from inode
+	// stbuf->st_mode   = S_IFDIR | 0755;
+	// stbuf->st_nlink  = 2;
+	// time(&stbuf->st_mtime);
 	return 0;
 }
 
 static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 
 	// Step 1: Call get_node_by_path() to get inode from path
-
+	struct inode* node=malloc(sizeof(struct inode));
+	if(get_node_by_path(path,0,node)<0){
+		printf("Path not found\n");
+		free(node);
+		return -1;
+	}
 	// Step 2: If not find, return -1
-
-    return 0;
+	free(node);
+	return 0;
 }
 
 static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
@@ -294,7 +329,8 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 
 
 static int tfs_mkdir(const char *path, mode_t mode) {
-	tfs_init(NULL);
+	printf("INSIDE MKDIR\n");
+	// tfs_init(NULL);
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
@@ -458,7 +494,7 @@ int main(int argc, char *argv[]) {
 	strcat(diskfile_path, "/DISKFILE");
 
 	fuse_stat = fuse_main(argc, argv, &tfs_ope, NULL);
-
+	
 	return fuse_stat;
 }
 
