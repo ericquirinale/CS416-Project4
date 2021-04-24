@@ -134,28 +134,32 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 	if(readRet<0){
 		printf("Error reading inode");
 		free(root);
-		return -2;
+		return -1;
 	}
 	if(root->type==FILE){
 		printf("Ino is for a file\n");
 		free(root);
-		return -1;
+		return -2;
 	}
-	void* currentBlock=malloc(BLOCK_SIZE);
+  // Step 2: Get data block of current directory from inode
+
+	struct dirent* currentBlock=malloc(BLOCK_SIZE);
 	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
+  // Step 3: Read directory's data block and check each directory entry.
 	for(int i=0;i<16;i++){
 		if(root->direct_ptr[i]==-1){
 			continue;
 		}
 		else{
 			bio_read(sb->d_start_blk+root->direct_ptr[i],currentBlock);
-			for(int i=0;i<dirents_per_block;i++){
-				temp_dirent=currentBlock+(i*sizeof(struct dirent));
+			for(int j=0;j<dirents_per_block;j++){
+				temp_dirent=currentBlock+j;
 				if(temp_dirent||temp_dirent->valid==0){
 					continue;
 				}
 				else{
 					if(strcmp(temp_dirent->name,fname)==0){
+  //If the name matches, then copy directory entry to dirent structure
 						int val=root->direct_ptr[i];
 						*dirent=*temp_dirent;
 						free(root);
@@ -166,10 +170,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 			}
 		}
 	}
-  // Step 2: Get data block of current directory from inode
-
-  // Step 3: Read directory's data block and check each directory entry.
-  //If the name matches, then copy directory entry to dirent structure
+	//A directory/file with the given name was not found
 	free(root);
 	free(currentBlock);
 	printf("Directory not found");
@@ -178,9 +179,79 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
 
+	struct dirent* currentBlock=malloc(BLOCK_SIZE);
+	if(dir_inode.type==FILE){
+		printf("dir_inode file type is not a directory \n");
+		return -2;
+	}
+	if(dir_inode.valid==0){
+		printf("dir_inode is not valid\n");
+		return -1;
+	}
+	if(get_bitmap(inode_bm,f_ino)==1){
+		printf("The new directories inode is already used somewhere\n");
+		return -3;
+	}
+	struct dirent* tempDirent=malloc(sizeof(struct dirent));
+
+	if(dir_find(dir_inode.ino,fname,name_len,tempDirent)!=0){
+		printf("File or folder with this name already exists in the directory");
+		return -4;
+	}
+	free(tempDirent);
+	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
+	int set=0;
+	struct dirent* newDirent=malloc(sizeof(struct dirent));
+	newDirent->valid=1;
+	newDirent->len=name_len;
+	newDirent->ino=f_ino;
+	strcpy(newDirent->name,fname);
+	for(int i=0;i<16;i++){
+		if(set==1){
+			break;
+		}
+		if(dir_inode.direct_ptr[i]==-1){
+			continue;
+		}
+		else{
+			bio_read(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
+			for(int j=0;j<dirents_per_block;j++){
+				struct dirent* curr=currentBlock+j;
+				if(curr==NULL||curr->valid==0){
+					set=1;
+					currentBlock[j]=*newDirent;
+					bio_write(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
+					free(newDirent);
+					// free(currentBlock);
+					return 0;
+				}
+			}
+		}
+	}
+	//Goes here if there is no datablocks for this directory that are empty.
+	//In this case, have to update this inode, so gotta biowrite for inode;
+	if(set==0){
+		for(int i=0;i<16;i++){
+			if(dir_inode.direct_ptr[i]==-1){
+				int blockNum=get_avail_blkno();
+				dir_inode.direct_ptr[i]=blockNum;
+				bio_read(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
+				currentBlock[0]=*newDirent;
+				bio_write(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
+				writei(dir_inode.ino,&dir_inode);
+				free(newDirent);
+				return 0;
+				// dir_inode.
+			}
+		}
+	}
+	//Goes here if all of the datablocks for this inode is full. IDK what to do here
+	printf("All datablocks for this inode are full\n");
+
 	// Step 1: Read dir_inode's data block and check each directory entry of dir_inode
+
 	// Step 2: Check if fname (directory name) is already used in other entries
-	
+
 	// Step 3: Add directory entry in dir_inode's data block and write to disk
 
 	// Allocate a new data block for this directory if it does not exist
@@ -188,8 +259,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	// Update directory inode
 
 	// Write directory entry
-
-	return 0;
+	return -1;
 }
 
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
