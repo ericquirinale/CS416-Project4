@@ -17,6 +17,7 @@
 #include <sys/time.h>
 #include <libgen.h>
 #include <limits.h>
+#include <math.h>
 
 #include "block.h"
 #include "tfs.h"
@@ -101,16 +102,22 @@ int writei(uint16_t ino, struct inode *inode) {
 
 	// Step 1: Get the block number where this inode resides on disk
 	int onDiskBM=(ino/inodes_per_block)+inode_start_block;
-
 	// Step 2: Get the offset in the block where this inode resides on disk
 	int offset=ino%inodes_per_block;
-
 	// Step 3: Write inode to disk 
-	void* data=malloc(sizeof(BLOCK_SIZE));
-	bio_read(onDiskBM,data);
+	
+	void* data=malloc(BLOCK_SIZE);
+
+	int readRet=bio_read(onDiskBM,data);
+	if(readRet<0){
+		printf("Error reading from disk\n");
+		return readRet;
+	}
 	memcpy(data+offset,inode,sizeof(struct inode));
+
 	bio_write(onDiskBM,data);
-	//free(inode);?
+	free(data);
+	free(inode);
 	return 0;
 }
 
@@ -166,9 +173,10 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	// 	printf("Invalid path\n");
 	// 	return -1;
 	// }
-	
+	char* temp=malloc(strlen(path)+1);
+	memcpy(temp,path,strlen(path)+1);
 	char* name=malloc(256);
-	name=strtok(path,"/");
+	name=strtok(temp,"/");
 	//Splits the path up into names
 	while(name!=NULL){
 
@@ -190,7 +198,7 @@ int tfs_mkfs() {
 
 	// Call dev_init() to initialize (Create) Diskfile
 	dev_init(diskfile_path);
-	dev_open(diskfile_path);
+	// dev_open(diskfile_path);
 	// write superblock information
 	sb = malloc(sizeof(struct superblock));
 	sb->magic_num = MAGIC_NUM;
@@ -199,7 +207,9 @@ int tfs_mkfs() {
 	sb->i_bitmap_blk=1;
 	sb->d_bitmap_blk=2;
 	sb->i_start_blk=3;
-	printf("SBMAXINUM IN MKFS%d\n",sb->max_inum);
+	int x=(int)ceil(((double)(MAX_INUM*sizeof(struct inode)))/(double)BLOCK_SIZE);//calculations for start of datablocks i think
+	sb->d_start_blk=sb->i_start_blk+x;
+
 	// initialize inode bitmap
 	inode_bm = malloc(sizeof(char)*MAX_INUM/8.0);
 
@@ -225,8 +235,11 @@ int tfs_mkfs() {
 	bio_write(0,(void*)(sb));
 	bio_write(1,(void*)(inode_bm));
 	bio_write(2,(void*)(data_bm));
+	// free(sb);
+	// sb=malloc(sizeof(struct superblock));
 	// bio_write(4,(void*)(root_inode));
-	writei(0,root_inode);
+	// writei(0,root_inode);
+	printf("End\n");
 	return 0;
 }
 
@@ -243,7 +256,7 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 		tfs_mkfs();
 	}
 	else{
-		sb= (struct superblock*) malloc(sizeof(BLOCK_SIZE));
+		sb= (struct superblock*) malloc(BLOCK_SIZE);
 		inode_bm=malloc(sizeof(sizeof(char)*MAX_INUM/8.0));
 		data_bm=malloc(sizeof(sizeof(char)*MAX_DNUM/8.0));
 		int sb_success=bio_read(0,sb);
@@ -252,13 +265,12 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 		
 		// int inode_success=bio_read(1,inode_bm_node);
 		// int data_success=bio_read(2,data_bm_node);
-		// if(sb_success<0||inode_success<0||data_success<0){
-		// 	printf("Couldn't find superblock or bitmap nodes\n");
-		// 	return;
-		// }
-		if(sb_success<0){
+		if(sb_success<0||inode_success<0||data_success<0){
 			printf("Couldn't find superblock or bitmap nodes\n");
-			return;
+			return NULL;
+		}
+		else{
+			printf("Everything found!\n");
 		}
 		// inode_bm=(inode_bm_node->direct_ptr[0]);
 		// data_bm=(data_bm_node->direct_ptr[0]);
@@ -276,7 +288,7 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 }
 
 static void tfs_destroy(void *userdata) {
-
+	// printf("In destroy?\n")
 	// Step 1: De-allocate in-memory data structures
 	dev_close();
 	// Step 2: Close diskfile
@@ -289,7 +301,7 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
 	// Step 1: call get_node_by_path() to get inode from path
 	struct inode* inode=malloc(sizeof(struct inode));
 	get_node_by_path(path,0,inode);
-
+	
 	stbuf->st_mode=inode->vstat.st_mode;
 	stbuf->st_nlink=inode->link;
 	stbuf->st_size=inode->size;
@@ -297,6 +309,7 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
 	stbuf->st_uid=getuid();
 	stbuf->st_gid=getgid();
 	stbuf->st_mtime=inode->vstat.st_mtime;
+	printf("End of tfs_getAttr\n");
 	// Step 2: fill attribute of file into stbuf from inode
 	// stbuf->st_mode   = S_IFDIR | 0755;
 	// stbuf->st_nlink  = 2;
