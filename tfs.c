@@ -291,6 +291,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 				set_bitmap(data_bm,blockNum);
 				// free(newDirent);
 				added=1;
+				break;
 				// dir_inode.
 			}
 		}
@@ -663,6 +664,19 @@ static int tfs_mkdir(const char *path, mode_t mode) {
 	// Step 3: Call get_avail_ino() to get an available inode number
 	int avail_ino = get_avail_ino();
 	struct inode* new_inode = malloc(sizeof(struct inode));
+	struct stat* vstat=malloc(sizeof(struct stat));
+	vstat->st_mode= S_IFDIR | 0755;
+	time(& vstat->st_mtime);
+
+	new_inode->vstat = *vstat;
+	new_inode->ino = avail_ino;
+	new_inode->size=0;
+	new_inode->link = 2;
+	new_inode->valid = 1;
+	new_inode->type = DIRECTORY;
+	for(int i=0; i<16; i++){
+		new_inode->direct_ptr[i] = -1;
+	}
 
 	// Step 4: Call dir_add() to add directory entry of target directory to parent directory
 	int dir_ret = dir_add(*parent_inode, avail_ino, base_name, strlen(base_name));
@@ -673,16 +687,7 @@ static int tfs_mkdir(const char *path, mode_t mode) {
 	}
 
 	// Step 5: Update inode for target directory
-	struct stat* vstat=malloc(sizeof(struct stat));
-	vstat->st_mode= mode;
-	time(& vstat->st_mtime);
-
-	new_inode->vstat = *vstat;
-	new_inode->ino = avail_ino;
-	new_inode->size=0;
-	new_inode->link = 2;
-	new_inode->valid = 1;
-	new_inode->type = DIRECTORY;
+	
 	set_bitmap(inode_bm,new_inode->ino);
 	// Step 6: Call writei() to write inode to disk
 	writei(avail_ino, new_inode);

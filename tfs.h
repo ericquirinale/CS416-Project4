@@ -17,6 +17,10 @@
 #define MAX_INUM 1024
 #define MAX_DNUM 16384
 
+#define INODE_BITMAP_BLOCK 1
+#define DATA_BITMAP_BLOCK 2
+typedef enum _TFS_TYPE{TFS_DIRECTORY=1,TFS_FILE=2}TFS_TYPE;
+
 
 struct superblock {
 	uint32_t	magic_num;			/* magic number */
