@@ -134,7 +134,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 	if(readRet<0){
 		printf("Error reading inode");
 		free(root);
-		return -1;
+		return -2;
 	}
 	if(root->type==FILE){
 		printf("Ino is for a file\n");
@@ -186,17 +186,17 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	}
 	if(dir_inode.valid==0){
 		printf("dir_inode is not valid\n");
-		return -1;
+		return -2;
 	}
 	if(get_bitmap(inode_bm,f_ino)==1){
 		printf("The new directories inode is already used somewhere\n");
-		return -3;
+		return -2;
 	}
 	struct dirent* tempDirent=malloc(sizeof(struct dirent));
 
 	if(dir_find(dir_inode.ino,fname,name_len,tempDirent)!=0){
 		printf("File or folder with this name already exists in the directory");
-		return -4;
+		return -2;
 	}
 	free(tempDirent);
 	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
@@ -247,7 +247,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	}
 	//Goes here if all of the datablocks for this inode is full. IDK what to do here
 	printf("All datablocks for this inode are full\n");
-
+	return -1;
 	// Step 1: Read dir_inode's data block and check each directory entry of dir_inode
 
 	// Step 2: Check if fname (directory name) is already used in other entries
@@ -259,10 +259,52 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	// Update directory inode
 
 	// Write directory entry
-	return -1;
 }
 
+//TODO: Finish this method
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
+
+	//Find the dirent corresponding to fname
+	//Delete it (set valid to 0 in dirent) and delete corresponding inode(set valid to 0 and ) 
+	//If deleting it results in an empty block, remove it from parents inode and make it empty in the bitmap
+
+	//DO WE HAVE TO RECURSIVELY DELETE ALL THE FILES/FOLDERS INSIDE OF THE GIVEN DIRECTORY OR WILL IT BE EMPTY?
+
+
+	if(dir_inode.type==FILE){
+		printf("Given inode is for a file, not a directory\n");
+		return -2;
+	}
+	struct dirent* currentBlock=malloc(BLOCK_SIZE);
+	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
+	for(int i=0;i<16;i++){
+		if(dir_inode.direct_ptr[i]!=-1){
+			for(int j=0;j<dirents_per_block;j++){
+				struct dirent* temp=currentBlock+j;
+				if(temp==NULL||temp->valid==0){
+					continue;
+				}
+				else{
+					if(strcmp(temp->name,fname)==0){
+						temp->valid=0;
+						//set dirent to invalid, now have to go to the 
+						//inode for this dirent and set it as invalid
+						struct inode* toDelete=NULL;
+						//Set it to invalid
+						readi(temp->ino,toDelete);
+						toDelete->valid=0;
+						writei(temp->ino,toDelete);
+						//Set the bitmap for this inode to be 0 (empty)
+						unset_bitmap(inode_bm,temp->ino);
+						return 0;
+					}
+				}
+			}
+		}
+	}
+	printf("Directory not found\n");
+	return -1;
+
 
 	// Step 1: Read dir_inode's data block and checks each directory entry of dir_inode
 	
@@ -270,7 +312,6 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
 	// Step 3: If exist, then remove it from dir_inode's data block and write to disk
 
-	return 0;
 }
 
 /* 
@@ -286,15 +327,24 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	char* name=malloc(256);
 	name=strtok(temp,"/");
 	//Splits the path up into names
+	struct dirent* crtDirent=malloc(sizeof(struct dirent));
+	//Initialize crtInode to the root of the directory
+	struct inode* crtInode=NULL;
+	readi(0,crtInode);
 	while(name!=NULL){
+		int findRet=dir_find(crtInode,name,strlen(name),crtDirent);
+		if(findRet==0){
+			printf("No directory with this path\n");
+			// free(crtInode);
+			free(crtDirent);
+			free(name);
+			free(temp);
+		}
+		free(crtInode);
+		readi(crtDirent->ino,crtInode);
 		name=strtok(NULL,"/");
-
-	
-	
-	
-	
 	}
-	readi(0,inode);
+
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
 	return 0;
