@@ -261,6 +261,28 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 	// Write directory entry
 }
 
+//Deleting leads to empty block, remove from parents inode and make it empty in the bitmap
+int remove_block(struct inode dir_inode, struct dirent* currentBlock, int i){
+	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
+
+	for(int j=0; j<dirents_per_block; j++){
+		struct dirent* temp = currentBlock+j;
+		
+		//Return if the block is not empty
+		if(temp!=NULL && temp->valid!=0){
+			return -1;
+		}
+	}
+
+	//Remove from parents inode and unset from bitmap
+	dir_inode.direct_ptr[i] = -1;
+	writei(dir_inode->ino, dir_inode);
+
+	unset_bitmap(data_bm, i);
+
+	return 0;
+}
+
 //TODO: Finish this method
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
@@ -268,36 +290,37 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 	//Delete it (set valid to 0 in dirent) and delete corresponding inode(set valid to 0 and ) 
 	//If deleting it results in an empty block, remove it from parents inode and make it empty in the bitmap
 
-	//DO WE HAVE TO RECURSIVELY DELETE ALL THE FILES/FOLDERS INSIDE OF THE GIVEN DIRECTORY OR WILL IT BE EMPTY?
-
-
 	if(dir_inode.type==FILE){
 		printf("Given inode is for a file, not a directory\n");
 		return -2;
 	}
 	struct dirent* currentBlock=malloc(BLOCK_SIZE);
 	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
+	
 	for(int i=0;i<16;i++){
 		if(dir_inode.direct_ptr[i]!=-1){
+			bio_read(sb->d_start_blk+dir_inode.direct_ptr[i], currentBlock);
 			for(int j=0;j<dirents_per_block;j++){
 				struct dirent* temp=currentBlock+j;
 				if(temp==NULL||temp->valid==0){
 					continue;
 				}
-				else{
-					if(strcmp(temp->name,fname)==0){
-						temp->valid=0;
-						//set dirent to invalid, now have to go to the 
-						//inode for this dirent and set it as invalid
-						struct inode* toDelete=NULL;
-						//Set it to invalid
-						readi(temp->ino,toDelete);
-						toDelete->valid=0;
-						writei(temp->ino,toDelete);
-						//Set the bitmap for this inode to be 0 (empty)
-						unset_bitmap(inode_bm,temp->ino);
-						return 0;
-					}
+				else if(strcmp(temp->name,fname)==0){
+					temp->valid=0;
+					//set dirent to invalid, now have to go to the inode for this dirent and set it as invalid
+					struct inode* toDelete=NULL;
+					
+					//Set it to invalid
+					readi(temp->ino,toDelete);
+					toDelete->valid=0;
+					writei(temp->ino,toDelete);
+					
+					//Set the bitmap for this inode to be 0 (empty)
+					unset_bitmap(inode_bm, temp->ino);
+
+					//If datablocks are all empty, unmap from bitmap and inode
+					remove_block(dir_inode, currentBlock, i);
+					return 0;
 				}
 			}
 		}
