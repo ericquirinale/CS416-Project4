@@ -128,30 +128,39 @@ int writei(uint16_t ino, struct inode *inode) {
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
 
   // Step 1: Call readi() to get the inode using ino (inode number of current directory)
+
+  // Step 2: Get data block of current directory from inode
+
+  // Step 3: Read directory's data block and check each directory entry.
+
 	struct inode* root=malloc(sizeof(struct inode));
 	struct dirent* temp_dirent;
 	int readRet=readi(ino,root);
+	//If there was an error finding the inode, return an error
 	if(readRet<0){
 		printf("Error reading inode");
 		free(root);
 		return -2;
 	}
+	//If the parameter ino is a file, return an error.
 	if(root->type==FILE){
 		printf("Ino is for a file\n");
 		free(root);
 		return -2;
 	}
-  // Step 2: Get data block of current directory from inode
 
 	struct dirent* currentBlock=malloc(BLOCK_SIZE);
 	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
-  // Step 3: Read directory's data block and check each directory entry.
+	//Goes through all the datablocks of the current inode.
 	for(int i=0;i<16;i++){
 		if(root->direct_ptr[i]==-1){
+			//This index does not have an attached datablock
 			continue;
 		}
 		else{
+			//A datablock was found, putting its data in currentblock
 			bio_read(sb->d_start_blk+root->direct_ptr[i],currentBlock);
+			//Going through all possible dirents in the current datablock
 			for(int j=0;j<dirents_per_block;j++){
 				temp_dirent=currentBlock+j;
 				if(temp_dirent||temp_dirent->valid==0){
@@ -159,7 +168,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 				}
 				else{
 					if(strcmp(temp_dirent->name,fname)==0){
-  //If the name matches, then copy directory entry to dirent structure
+  						//If the name matches, then copy directory entry to dirent structure
 						int val=root->direct_ptr[i];
 						*dirent=*temp_dirent;
 						free(root);
@@ -175,6 +184,16 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 	free(currentBlock);
 	printf("Directory not found");
 	return 0;
+}
+
+//Method to allocate memory to sb, and bitmaps and read from disk
+void start(){
+
+}
+
+//Method to write sb and bitmaps to disk and free allocated memory
+void end(){
+
 }
 
 int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t name_len) {
@@ -193,7 +212,6 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 		return -2;
 	}
 	struct dirent* tempDirent=malloc(sizeof(struct dirent));
-
 	if(dir_find(dir_inode.ino,fname,name_len,tempDirent)!=0){
 		printf("File or folder with this name already exists in the directory");
 		return -2;
@@ -290,6 +308,10 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 	//Delete it (set valid to 0 in dirent) and delete corresponding inode(set valid to 0 and ) 
 	//If deleting it results in an empty block, remove it from parents inode and make it empty in the bitmap
 
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 	if(dir_inode.type==FILE){
 		printf("Given inode is for a file, not a directory\n");
 		return -2;
@@ -337,6 +359,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
 }
 
+
 /* 
  * namei operation
  */
@@ -355,22 +378,24 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	struct inode* crtInode=NULL;
 	readi(0,crtInode);
 	while(name!=NULL){
-		int findRet=dir_find(crtInode,name,strlen(name),crtDirent);
+		int findRet=dir_find(crtInode->ino,name,strlen(name),crtDirent);
 		if(findRet==0){
 			printf("No directory with this path\n");
 			// free(crtInode);
 			free(crtDirent);
 			free(name);
 			free(temp);
+			return -1;
 		}
 		free(crtInode);
 		readi(crtDirent->ino,crtInode);
 		name=strtok(NULL,"/");
 	}
-
+	*inode=*crtInode;
+	free(crtInode);
 	// Step 1: Resolve the path name, walk through path, and finally, find its inode.
 	// Note: You could either implement it in a iterative way or recursive way
-	return 0;
+	return inode->ino;
 }
 
 /* 
@@ -413,7 +438,10 @@ int tfs_mkfs() {
 	root_inode->valid=1;
 	root_inode->type=DIRECTORY;
 	root_inode->link=2;
-	root_inode->vstat=*vstat;	
+	root_inode->vstat=*vstat;
+	for(int i=0;i<16;i++){
+		root_inode->direct_ptr[i]=-1;
+	}
 	bio_write(0,(void*)(sb));
 	bio_write(1,(void*)(inode_bm));
 	bio_write(2,(void*)(data_bm));
