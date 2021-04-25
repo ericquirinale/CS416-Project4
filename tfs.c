@@ -379,8 +379,14 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	// 	printf("Invalid path\n");
 	// 	return -1;
 	// }
+	printf("Inside get_node_by_path\n");
+	printf("Path:%s\n",path);
+	if(strcmp(path,"/")==0){
+		readi(0,inode);
+		return 0;
+	}
 	char* temp=malloc(strlen(path)+1);
-	strcpy(temp,path);
+	strncpy(temp,path,strlen(path));
 	char* name=malloc(256);
 	name=strtok(temp,"/");
 	//Splits the path up into names
@@ -586,7 +592,7 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 		}
 	}
 	end();
-
+	printf("Finished readdir\n");
 	return 0;
 }
 
