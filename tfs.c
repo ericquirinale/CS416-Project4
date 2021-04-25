@@ -44,7 +44,7 @@ int isInit=0;
  */
 int get_avail_ino() {
 	for(int i=0;i<(sb->max_inum)*8;i++){
-		if(get_bitmap(inode_bm,i)){
+		if(get_bitmap(inode_bm,i)==0){
 			//Idk if we should update the bitmap here
 			return i;
 		}
@@ -104,9 +104,9 @@ int readi(uint16_t ino, struct inode *inode) {
 int writei(uint16_t ino, struct inode *inode) {
 
 	// Step 1: Get the block number where this inode resides on disk
-	printf("Before 110\n");
+	// printf("Before 110\n");
 	int onDiskBM=(ino/inodes_per_block)+inode_start_block;
-	printf("After 110\n");
+	// printf("After 110\n");
 	// Step 2: Get the offset in the block where this inode resides on disk
 	int offset=ino%inodes_per_block;
 	// Step 3: Write inode to disk 
@@ -124,7 +124,7 @@ int writei(uint16_t ino, struct inode *inode) {
 
 	bio_write(onDiskBM,data);
 	free(data);
-	free(inode);
+	// free(inode);
 	return 0;
 }
 
@@ -243,6 +243,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 		printf("File or folder with this name already exists in the directory");
 		return -2;
 	}
+	printf("After checks in dir_add\n");
 	free(tempDirent);
 	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
 	int set=0;
@@ -616,51 +617,57 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 
 
 static int tfs_mkdir(const char *path, mode_t mode) {
-	start();
-    printf("INSIDE MKDIR\n");
+	// start();
+	printf("INSIDE MKDIR\n");
 	printf("Path in mkdir:%s\n",path);
-    // Step 1: Use dirname() and basename() to separate parent directory path and target directory name
-	char* dirc,basec;
-	dirc = strdup(path);
-     basec = strdup(path);
-    char* dir_name = dirname(dirc);
-    char* base_name = basename(basec);
+	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
+	// char* dirc;
+	// char* basec;
+	// dirc = strdup(path);
+	// basec = strdup(path);
+	char* dirc = malloc(strlen(path)+1);
+	strncpy(dirc,path, sizeof(path));
+	char* basec = malloc(strlen(path)+1);
+	strncpy(basec,path, sizeof(path));
+
+	char* dir_name = dirname(dirc);
+	char* base_name = basename(basec);
 	printf("dir_name%s\n",dir_name);
 	printf("base_name%s\n",base_name);
-    // Step 2: Call get_node_by_path() to get inode of parent directory
-    struct inode* parent_inode = malloc(sizeof(struct inode));
-    int parent_ino = get_node_by_path(dir_name, 0, parent_inode);
-    if(parent_ino == -1){
-        printf("Directory does not exist\n");
-        return -1;
-    }
+	// Step 2: Call get_node_by_path() to get inode of parent directory
+	struct inode* parent_inode = malloc(sizeof(struct inode));
+	int parent_ino = get_node_by_path(dir_name, 0, parent_inode);
+	if(parent_ino == -1){
+		printf("Directory does not exist\n");
+		return -1;
+	}
 
-    // Step 3: Call get_avail_ino() to get an available inode number
-    int avail_ino = get_avail_ino();
-    struct inode* new_inode = malloc(sizeof(struct inode));
+	// Step 3: Call get_avail_ino() to get an available inode number
+	int avail_ino = get_avail_ino();
+	struct inode* new_inode = malloc(sizeof(struct inode));
 
-    // Step 4: Call dir_add() to add directory entry of target directory to parent directory
-    int dir_ret = dir_add(*parent_inode, avail_ino, base_name, strlen(base_name));
-    if(dir_ret < 0){
-        printf("Error adding new directory");
-        return -1;
-    }
+	// Step 4: Call dir_add() to add directory entry of target directory to parent directory
+	int dir_ret = dir_add(*parent_inode, avail_ino, base_name, strlen(base_name));
+	if(dir_ret < 0){
+		printf("Error adding new directory");
+		return -1;
+	}
 
-    // Step 5: Update inode for target directory
-    struct stat* vstat=malloc(sizeof(struct stat));
-    vstat->st_mode= mode;
-    time(& vstat->st_mtime);
+	// Step 5: Update inode for target directory
+	struct stat* vstat=malloc(sizeof(struct stat));
+	vstat->st_mode= mode;
+	time(& vstat->st_mtime);
 
-    new_inode->vstat = *vstat;
-    new_inode->ino = avail_ino;
-    new_inode->link = 2;
-    new_inode->valid = 1;
-    new_inode->type = DIRECTORY;
+	new_inode->vstat = *vstat;
+	new_inode->ino = avail_ino;
+	new_inode->link = 2;
+	new_inode->valid = 1;
+	new_inode->type = DIRECTORY;
 
-    // Step 6: Call writei() to write inode to disk
-    writei(avail_ino, new_inode);
-	end();
-    return 0;
+	// Step 6: Call writei() to write inode to disk
+	writei(avail_ino, new_inode);
+	// end();
+	return 0;
 }
 
 static int tfs_rmdir(const char *path) {
