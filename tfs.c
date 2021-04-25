@@ -93,8 +93,11 @@ int readi(uint16_t ino, struct inode *inode) {
 
 	void* data=malloc(BLOCK_SIZE);
 	bio_read(onDiskBM,data);
-	inode=malloc(sizeof(struct inode));
-	memcpy(inode,data+offset,sizeof(struct inode));
+	// inode = malloc(sizeof(struct inode));
+	struct inode* temp = malloc(sizeof(struct inode));
+	memcpy(temp,data+offset,sizeof(struct inode));
+
+	*inode = *temp;
 	free(data);
 	return 0;
 }
@@ -203,6 +206,7 @@ void start(){
 
 //Method to write sb and bitmaps to disk and free allocated memory
 void end(){
+	isInit = 0;
 	bio_write(0,sb);
 	bio_write(1,inode_bm);
 	bio_write(2,data_bm);
@@ -338,7 +342,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 				else if(strcmp(temp->name,fname)==0){
 					temp->valid=0;
 					//set dirent to invalid, now have to go to the inode for this dirent and set it as invalid
-					struct inode* toDelete=NULL;
+					struct inode* toDelete=malloc(sizeof(struct inode));
 					
 					//Set it to invalid
 					readi(temp->ino,toDelete);
@@ -382,16 +386,16 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
 	//Splits the path up into names
 	struct dirent* crtDirent=malloc(sizeof(struct dirent));
 	//Initialize crtInode to the root of the directory
-	struct inode* crtInode=NULL;
+	struct inode* crtInode= malloc(sizeof(struct inode));
 	readi(ino,crtInode);
 	while(name!=NULL){
 		int findRet=dir_find(crtInode->ino,name,strlen(name),crtDirent);
 		if(findRet==0){
 			printf("No directory with this path\n");
 			// free(crtInode);
-			free(crtDirent);
-			free(name);
-			free(temp);
+			// free(crtDirent);
+			// free(name);
+			// free(temp);
 			return -1;
 		}
 		free(crtInode);
@@ -548,9 +552,40 @@ static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 
 static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
 	printf("INSIDE READDIR\n");
+	start();
+
 	// Step 1: Call get_node_by_path() to get inode from path
+	struct inode* node = malloc(sizeof(struct inode));
+	int ret = get_node_by_path(path, 0, node);
+	if(ret < 0){
+		printf("No directory with path\n");
+		return -1;
+	}
+	if(node->type!=DIRECTORY){
+		printf("Path is not a directory\n");
+		return -1;
+	}
 
 	// Step 2: Read directory entries from its data blocks, and copy them to filler
+	struct dirent* currentBlock=malloc(BLOCK_SIZE);
+	int dirents_per_block=(int) ((double)BLOCK_SIZE)/((double)sizeof(struct dirent));
+
+	filler(buffer, ".", NULL, 0);
+	filler(buffer, "..", NULL, 0);
+	for(int i=0; i<16; i++){
+		if(node->direct_ptr[i] != -1){
+			bio_read(sb->d_start_blk+node->direct_ptr[i], currentBlock);
+			for(int j=0;j<dirents_per_block;j++){
+				struct dirent* temp=currentBlock+j;
+				if(temp==NULL||temp->valid==0){
+					continue;
+				}else{ 
+					filler(buffer, currentBlock->name, NULL, 0);
+				}
+			}
+		}
+	}
+	end();
 
 	return 0;
 }
