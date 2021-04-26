@@ -823,20 +823,118 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 }
 
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
-	printf("Inside tfs_read\n");
-	// Step 1: You could call get_node_by_path() to get inode from path
+    printf("Inside tfs_read\n");
+    // Step 1: You could call get_node_by_path() to get inode from path
+    
+    struct inode* inode = malloc(sizeof(struct inode));
+    int inode_ino = get_node_by_path(path, 0, inode);
+    if(inode_ino == -1){
+        printf("Directory does not exist\n");
+        end();
+        return -1;
+    }
 
-	// Step 2: Based on size and offset, read its data blocks from disk
+    // Step 2: Based on size and offset, read its data blocks from disk
+    int block_num = (int)offset/BLOCK_SIZE;
+    int block_offset = offset%BLOCK_SIZE;
+    int total_blocks = 1;
+    int bytes_read = BLOCK_SIZE-block_offset;
 
-	// Step 3: copy the correct amount of data from offset to buffer
+    while(bytes_read < size){
+        total_blocks++;
+        bytes_read+=BLOCK_SIZE;
+    }
 
-	// Note: this function should return the amount of bytes you copied to buffer
-	return 0;
+    for(int i=block_num; i<block_num+total_blocks; i++){
+        if(inode->direct_ptr[i]==-1){
+            printf("Error reading from memory\n");
+            return -1;
+        }
+        }
+
+    // Step 3: copy the correct amount of data from offset to buffer
+    int bytes_left = size;
+    int bytes_to_read = BLOCK_SIZE-block_offset; 
+    int bytesRead = 0;
+
+    void* currentBlock=malloc(BLOCK_SIZE);
+    for(int i=block_num; i<block_num+total_blocks; i++){
+        bio_read(sb->d_start_blk+ inode->direct_ptr[i], currentBlock);
+        memcpy(buffer+bytesRead, currentBlock+block_offset , bytes_to_read);
+        bytes_left -= bytes_to_read;
+        bytesRead += bytes_to_read;
+        bytes_to_read = bytes_left<BLOCK_SIZE? bytes_left: BLOCK_SIZE;
+        block_offset = 0;
+    }
+    free(currentBlock);
+
+    // Note: this function should return the amount of bytes you copied to buffer
+    return size;
 }
 
 static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
 	printf("Inside tfs_write\n");
+	start();
+	if(size==0){
+		return 0;
+	}
+	if(size+offset>16*BLOCK_SIZE){
+		printf("Offset/size is too large\n");
+		return -1;
+	}
+	struct inode* inode=malloc(sizeof(struct inode));
+	int found=get_node_by_path(path,0,inode);
+	if(found==-1){
+		printf("No file found with this path\n");
+		free(inode);
+		return -1;
+	}
+	if(inode->type==DIRECTORY){
+		printf("Given path is for a directory\n");
+		free(inode);
+		return -1;
+	}
+	int bytesRead=0;
+	int startingBlock=(int) offset/BLOCK_SIZE;
+	// startingBlock--;
 
+	int blockOffset=offset%BLOCK_SIZE;
+	int totalBlocks=1;
+	bytesRead=BLOCK_SIZE-blockOffset;
+
+	while(bytesRead<size){
+		totalBlocks++;
+		bytesRead+=BLOCK_SIZE;
+	}
+	void* currentBlock=malloc(BLOCK_SIZE);
+	for(int i=startingBlock;i<startingBlock+totalBlocks;i++){
+		if(inode->direct_ptr[i]==-1){
+			int newBlockNum=get_avail_blkno();
+			if(newBlockNum==-1){
+				printf("Error: Not enough memory left on disk\n");
+				free(currentBlock);
+				free(inode);
+				return -1;
+			}
+			else{
+				inode->direct_ptr[i]=newBlockNum;
+				set_bitmap(data_bm,newBlockNum);
+			}
+
+		}
+	}
+	writei(inode->ino,inode);
+	int bytesLeft=size;
+	int read=0;
+	for(int i=startingBlock;i<startingBlock+totalBlocks;i++){
+		bio_read(sb->d_start_blk+inode->direct_ptr[i],currentBlock);
+		int toRead=bytesLeft<(BLOCK_SIZE-blockOffset)?bytesLeft:(BLOCK_SIZE-blockOffset);
+		bytesLeft-=toRead;
+		memcpy(currentBlock+blockOffset,buffer+read,toRead);
+		read+=toRead;
+		bio_write(sb->d_start_blk+inode->direct_ptr[i],currentBlock);
+		blockOffset=0;
+	}
 	// Step 1: You could call get_node_by_path() to get inode from path
 
 	// Step 2: Based on size and offset, read its data blocks from disk
@@ -846,6 +944,7 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 	// Step 4: Update the inode info and write it to disk
 
 	// Note: this function should return the amount of bytes you write to disk
+	end();
 	return size;
 }
 
