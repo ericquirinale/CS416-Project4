@@ -270,6 +270,7 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 					bio_write(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
 					free(newDirent);
 					added=1;
+					break;
 					// free(currentBlock);
 				}
 			}
@@ -752,17 +753,57 @@ static int tfs_releasedir(const char *path, struct fuse_file_info *fi) {
 
 static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 	printf("Inside tfs_create\n");
+
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
+	char* dirc = malloc(strlen(path)+1);
+	strncpy(dirc,path, strlen(path)+1);
+	char* basec = malloc(strlen(path)+1);
+	strncpy(basec,path, strlen(path)+1);
+
+	char* dir_name = dirname(dirc);
+	char* base_name = basename(basec);
+	printf("dir_name%s\n",dir_name);
+	printf("base_name%s\n",base_name);
 
 	// Step 2: Call get_node_by_path() to get inode of parent directory
+	struct inode* parent_inode = malloc(sizeof(struct inode));
+	int parent_ino = get_node_by_path(dir_name, 0, parent_inode);
+	if(parent_ino == -1){
+		printf("Directory does not exist\n");
+		end();
+		return -1;
+	}
 
 	// Step 3: Call get_avail_ino() to get an available inode number
+	int avail_ino = get_avail_ino();
+	struct inode* new_inode = malloc(sizeof(struct inode));
+	struct stat* vstat=malloc(sizeof(struct stat));
+	vstat->st_mode= S_IFREG; //FILE TYPE MODE
+	time(& vstat->st_mtime);
+
+	new_inode->vstat = *vstat;
+	new_inode->ino = avail_ino;
+	new_inode->size=0;
+	new_inode->link = 1;
+	new_inode->valid = 1;
+	new_inode->type = FILE;
+	for(int i=0; i<16; i++){
+		new_inode->direct_ptr[i] = -1;
+	}
 
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
+	int dir_ret = dir_add(*parent_inode, avail_ino, base_name, strlen(base_name));
+	if(dir_ret < 0){
+		printf("Error adding new directory");
+		end();
+		return -1;
+	}
 
 	// Step 5: Update inode for target file
 
+	set_bitmap(inode_bm,new_inode->ino);
 	// Step 6: Call writei() to write inode to disk
+	writei(avail_ino, new_inode);
 
 	return 0;
 }
