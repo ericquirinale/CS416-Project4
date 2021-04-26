@@ -623,7 +623,7 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 				if(temp==NULL||temp->valid==0){
 					continue;
 				}else{ 
-					filler(buffer, currentBlock->name, NULL, 0);
+					filler(buffer, temp->name, NULL, 0);
 				}
 			}
 		}
