@@ -176,7 +176,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 				else{
 					if(strcmp(temp_dirent->name,fname)==0){
   						//If the name matches, then copy directory entry to dirent structure
-						int val=root->direct_ptr[i];
+						// int val=root->direct_ptr[i];
 						*dirent=*temp_dirent;
 						free(root);
 						free(currentBlock);
@@ -698,8 +698,12 @@ static int tfs_mkdir(const char *path, mode_t mode) {
 
 static int tfs_rmdir(const char *path) {
 	start();
-	char* parent=dirname(path);
-	char* target=basename(path);
+	char* dirc = malloc(strlen(path)+1);
+	strncpy(dirc,path, strlen(path)+1);
+	char* basec = malloc(strlen(path)+1);
+	strncpy(basec,path, strlen(path)+1);
+	char* parent= dirname(dirc);
+	char* target = basename(basec);
 	struct inode* parentInode=malloc(sizeof(struct inode));
 	int ret=get_node_by_path(parent,0,parentInode);
 	if(ret==-1){
