@@ -188,7 +188,7 @@ int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *di
 	}
 	//A directory/file with the given name was not found
 	free(root);
-	free(currentBlock);
+	// free(currentBlock);
 	printf("Directory not found\n");
 	return -1;
 }
@@ -285,13 +285,16 @@ int dir_add(struct inode dir_inode, uint16_t f_ino, const char *fname, size_t na
 			if(dir_inode.direct_ptr[i]==-1){
 				int blockNum=get_avail_blkno();
 				dir_inode.direct_ptr[i]=blockNum;
-				bio_read(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
+				free(currentBlock);
+				// bio_read(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
+				currentBlock = calloc(1,BLOCK_SIZE);
 				currentBlock[0]=*newDirent;
 				bio_write(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
 				writei(dir_inode.ino,&dir_inode);
 				set_bitmap(data_bm,blockNum);
 				// free(newDirent);
 				added=1;
+				free(currentBlock);
 				break;
 				// dir_inode.
 			}
@@ -577,6 +580,8 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
 }
 
 static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
+	printf("Inside opendir\n");
+	start();
 
 	// Step 1: Call get_node_by_path() to get inode from path
 	struct inode* node=malloc(sizeof(struct inode));
@@ -587,6 +592,7 @@ static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 	}
 	// Step 2: If not find, return -1
 	free(node);
+	end();
 	return 0;
 }
 
@@ -718,7 +724,7 @@ static int tfs_rmdir(const char *path) {
 	readi(targetDirent->ino,targetInode);
 	for(int i=0;i<16;i++){
 		if(targetInode->direct_ptr[i]!=-1){
-			printf("rmdir: failed to remove \'%s\': Directory not empty",target);
+			printf("rmdir: failed to remove \'%s\': Directory not empty\n",target);
 			free(targetInode);
 			free(targetDirent);
 			free(parentInode);
@@ -753,6 +759,7 @@ static int tfs_releasedir(const char *path, struct fuse_file_info *fi) {
 
 static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
 	printf("Inside tfs_create\n");
+	start();
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
 	char* dirc = malloc(strlen(path)+1);
@@ -792,6 +799,14 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	}
 
 	// Step 4: Call dir_add() to add directory entry of target file to parent directory
+	struct dirent* temp = malloc(sizeof(struct dirent));
+	if(dir_find(parent_inode->ino, base_name, strlen(base_name), temp)==0){
+		printf("File already exists\n");
+		free(temp);
+		end();
+		return -1;
+	}
+	free(temp);
 	int dir_ret = dir_add(*parent_inode, avail_ino, base_name, strlen(base_name));
 	if(dir_ret < 0){
 		printf("Error adding new directory");
@@ -804,7 +819,7 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	set_bitmap(inode_bm,new_inode->ino);
 	// Step 6: Call writei() to write inode to disk
 	writei(avail_ino, new_inode);
-
+	end();
 	return 0;
 }
 
@@ -982,25 +997,6 @@ static int tfs_unlink(const char *path) {
 	end();
 	printf("Removed successfully");
 	return 0;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
 
