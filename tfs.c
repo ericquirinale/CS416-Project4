@@ -810,6 +810,7 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 
 static int tfs_open(const char *path, struct fuse_file_info *fi) {
 	printf("Inside tfs_open\n");
+	start();
 	// Step 1: Call get_node_by_path() to get inode from path
 	struct inode* inode=malloc(sizeof(struct inode));
 	int ret=get_node_by_path(path,0,inode);
@@ -818,14 +819,14 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 		return -1;
 	}
 	// Step 2: If not find, return -1
-
+	end();
 	return 0;
 }
 
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
     printf("Inside tfs_read\n");
     // Step 1: You could call get_node_by_path() to get inode from path
-    
+    start();
     struct inode* inode = malloc(sizeof(struct inode));
     int inode_ino = get_node_by_path(path, 0, inode);
     if(inode_ino == -1){
@@ -869,6 +870,7 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
     free(currentBlock);
 
     // Note: this function should return the amount of bytes you copied to buffer
+    end();
     return size;
 }
 
@@ -950,6 +952,55 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 
 static int tfs_unlink(const char *path) {
 	printf("Inside tfs_unlink\n");
+
+	start();
+	char* dirc = malloc(strlen(path)+1);
+	strncpy(dirc,path, strlen(path)+1);
+	char* basec = malloc(strlen(path)+1);
+	strncpy(basec,path, strlen(path)+1);
+	char* parent= dirname(dirc);
+	char* target = basename(basec);
+	struct inode* parentInode=malloc(sizeof(struct inode));
+	int ret=get_node_by_path(parent,0,parentInode);
+	if(ret==-1){
+		printf("No file with this path");
+		free(parentInode);
+		return -1;
+	}
+	struct dirent* targetDirent=malloc(sizeof(struct dirent));
+	dir_find(parentInode->ino,target,strlen(target),targetDirent);
+	struct inode* targetInode=malloc(sizeof(struct inode));
+	readi(targetDirent->ino,targetInode);
+	for(int i=0;i<16;i++){
+		if(targetInode->direct_ptr[i]!=-1){
+			unset_bitmap(data_bm,targetInode->direct_ptr[i]);
+			targetInode->direct_ptr[i]=-1;
+		}
+	}
+	dir_remove(*parentInode,target,strlen(target));
+	unset_bitmap(inode_bm,targetInode->ino);
+	end();
+	printf("Removed successfully");
+	return 0;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name
 

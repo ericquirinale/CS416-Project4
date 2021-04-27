@@ -65,7 +65,7 @@ int main(int argc, char **argv) {
 		perror("open");
 		exit(1);
 	}
-
+	printf("test\n");
 
 	/* Perform sequential reading */
 	for (i = 0; i < ITERS; i++) {
