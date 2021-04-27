@@ -778,7 +778,7 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	int avail_ino = get_avail_ino();
 	struct inode* new_inode = malloc(sizeof(struct inode));
 	struct stat* vstat=malloc(sizeof(struct stat));
-	vstat->st_mode= S_IFREG; //FILE TYPE MODE
+	vstat->st_mode= S_IFREG|0666; //FILE TYPE MODE
 	time(& vstat->st_mtime);
 
 	new_inode->vstat = *vstat;
@@ -920,9 +920,9 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 				inode->direct_ptr[i]=newBlockNum;
 				set_bitmap(data_bm,newBlockNum);
 			}
-
 		}
 	}
+	inode->size+=size;
 	writei(inode->ino,inode);
 	int bytesLeft=size;
 	int read=0;

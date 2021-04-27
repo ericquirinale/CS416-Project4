@@ -9,7 +9,7 @@
 #include <dirent.h>
 
 /* You need to change this macro to your TFS mount point*/
-#define TESTDIR "/tmp/mountdir"
+#define TESTDIR "/tmp/kdt57/mountdir"
 
 #define N_FILES 100
 #define BLOCKSIZE 4096
@@ -37,8 +37,9 @@ int main(int argc, char **argv) {
 	for (i = 0; i < ITERS; i++) {
 		//memset with some random data
 		memset(buf, 0x61 + i, BLOCKSIZE);
-
-		if (write(fd, buf, BLOCKSIZE) != BLOCKSIZE) {
+		int x=write(fd,buf,BLOCKSIZE);
+		printf("X:%d\n",x);
+		if (x!= BLOCKSIZE) {
 			printf("TEST 2: File write failure \n");
 			exit(1);
 		}
