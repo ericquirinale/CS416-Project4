@@ -2,7 +2,9 @@
  *  Copyright (C) 2021 CS416 Rutgers CS
  *	Tiny File System
  *	File:	tfs.c
- *
+ *	Kunal Thakker - kdt57
+ *	Bryan Law - bpl52
+ *	Tested on: kill.cs.rutgers.edu
  */
 
 #define FUSE_USE_VERSION 26
@@ -348,7 +350,6 @@ int remove_block(struct inode dir_inode, struct dirent* currentBlock, int i){
 	return 0;
 }
 
-//TODO: Finish this method
 int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 
 	//Find the dirent corresponding to fname
@@ -379,7 +380,7 @@ int dir_remove(struct inode dir_inode, const char *fname, size_t name_len) {
 					readi(temp->ino,toDelete);
 					toDelete->valid=0;
 					writei(temp->ino,toDelete);
-					
+					bio_write(sb->d_start_blk+dir_inode.direct_ptr[i],currentBlock);
 					//Set the bitmap for this inode to be 0 (empty)
 					unset_bitmap(inode_bm, temp->ino);
 
@@ -584,6 +585,7 @@ static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 	start();
 
 	// Step 1: Call get_node_by_path() to get inode from path
+	start();
 	struct inode* node=malloc(sizeof(struct inode));
 	if(get_node_by_path(path,0,node)<0){
 		printf("Path not found\n");
@@ -704,6 +706,7 @@ static int tfs_mkdir(const char *path, mode_t mode) {
 }
 
 static int tfs_rmdir(const char *path) {
+	printf("Inside tfs_rmdir\n");
 	start();
 	char* dirc = malloc(strlen(path)+1);
 	strncpy(dirc,path, strlen(path)+1);
@@ -714,12 +717,18 @@ static int tfs_rmdir(const char *path) {
 	struct inode* parentInode=malloc(sizeof(struct inode));
 	int ret=get_node_by_path(parent,0,parentInode);
 	if(ret==-1){
-		printf("No directory with this path");
+		printf("No directory with this path\n");
 		free(parentInode);
+		end();
 		return -1;
 	}
 	struct dirent* targetDirent=malloc(sizeof(struct dirent));
-	dir_find(parentInode->ino,target,strlen(target),targetDirent);
+	int x=dir_find(parentInode->ino,target,strlen(target),targetDirent);
+	if(x<0){
+		printf("Could not find directory?\n");
+		end();
+		return -1;
+	}
 	struct inode* targetInode=malloc(sizeof(struct inode));
 	readi(targetDirent->ino,targetInode);
 	for(int i=0;i<16;i++){
@@ -728,6 +737,7 @@ static int tfs_rmdir(const char *path) {
 			free(targetInode);
 			free(targetDirent);
 			free(parentInode);
+			end();
 			return -1;
 		}
 	}
@@ -735,7 +745,7 @@ static int tfs_rmdir(const char *path) {
 	dir_remove(*parentInode,target,strlen(target));
 	unset_bitmap(inode_bm,targetInode->ino);
 	end();
-	printf("Removed successfully");
+	printf("Removed successfully\n");
 	return 0;
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 
@@ -748,7 +758,6 @@ static int tfs_rmdir(const char *path) {
 	// Step 5: Call get_node_by_path() to get inode of parent directory
 
 	// Step 6: Call dir_remove() to remove directory entry of target directory in its parent directory
-
 }
 
 static int tfs_releasedir(const char *path, struct fuse_file_info *fi) {

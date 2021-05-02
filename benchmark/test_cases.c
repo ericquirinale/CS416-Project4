@@ -9,7 +9,7 @@
 #include <dirent.h>
 
 /* You need to change this macro to your TFS mount point*/
-#define TESTDIR "/tmp/bpl52/mountdir"
+#define TESTDIR "/tmp/kdt57/mountdir"
 
 #define N_FILES 100
 #define BLOCKSIZE 4096
@@ -154,60 +154,60 @@ int main(int argc, char **argv) {
 	printf("TEST 8: Sub-directory create success \n");
 
 
-	/* TEST 9: Large file write-read test */
-	if ((fd = creat(TESTDIR "/largefile", FILEPERM)) < 0) {
-		perror("creat large file fail");
-		exit(1);
-	}
+	// /* TEST 9: Large file write-read test */
+	// if ((fd = creat(TESTDIR "/largefile", FILEPERM)) < 0) {
+	// 	perror("creat large file fail");
+	// 	exit(1);
+	// }
 
-	/* Perform sequential writes */
-	for (i = 0; i < ITERS_LARGE; i++) {
-		//memset with some random data
-		memset(buf, 0x61 + i % 26, BLOCKSIZE);
+	// /* Perform sequential writes */
+	// for (i = 0; i < ITERS_LARGE; i++) {
+	// 	//memset with some random data
+	// 	memset(buf, 0x61 + i % 26, BLOCKSIZE);
 
-		if (write(fd, buf, BLOCKSIZE) != BLOCKSIZE) {
-			printf("TEST 9: Large file write failure \n");
-			exit(1);
-		}
-	}
+	// 	if (write(fd, buf, BLOCKSIZE) != BLOCKSIZE) {
+	// 		printf("TEST 9: Large file write failure \n");
+	// 		exit(1);
+	// 	}
+	// }
 	
-	fstat(fd, &st);
-	if (st.st_size != ITERS_LARGE*BLOCKSIZE) {
-		printf("TEST 9: Large file write failure \n");
-		exit(1);
-	}
-	printf("TEST 9: Large file write success \n");
+	// fstat(fd, &st);
+	// if (st.st_size != ITERS_LARGE*BLOCKSIZE) {
+	// 	printf("TEST 9: Large file write failure \n");
+	// 	exit(1);
+	// }
+	// printf("TEST 9: Large file write success \n");
 
 
-	/* Close operation */	
-	if (close(fd) < 0) {
-		perror("close largefile");
-		exit(1);
-	}
+	// /* Close operation */	
+	// if (close(fd) < 0) {
+	// 	perror("close largefile");
+	// 	exit(1);
+	// }
 
-	/* Open for reading */
-	if ((fd = open(TESTDIR "/largefile", FILEPERM)) < 0) {
-		perror("open");
-		exit(1);
-	}
+	// /* Open for reading */
+	// if ((fd = open(TESTDIR "/largefile", FILEPERM)) < 0) {
+	// 	perror("open");
+	// 	exit(1);
+	// }
 
 
-	/* TEST 10: Large file read test */
-	if (pread(fd, buf, BLOCKSIZE, 1000*BLOCKSIZE) != BLOCKSIZE) {
-		perror("pread");
-		printf("TEST 10: Large file read failure \n");
-		exit(1);
-	}
+	// /* TEST 10: Large file read test */
+	// if (pread(fd, buf, BLOCKSIZE, 1000*BLOCKSIZE) != BLOCKSIZE) {
+	// 	perror("pread");
+	// 	printf("TEST 10: Large file read failure \n");
+	// 	exit(1);
+	// }
     
-	/* Verify file content */
-	if (buf[0] != 0x61 + 1000 % 26) {
-		perror("pread");
-		printf("TEST 10: Large file read failure \n");
-		exit(1);
-	}
+	// /* Verify file content */
+	// if (buf[0] != 0x61 + 1000 % 26) {
+	// 	perror("pread");
+	// 	printf("TEST 10: Large file read failure \n");
+	// 	exit(1);
+	// }
 
-	printf("TEST 10: Large file read Success \n");
-	close(fd);	
+	// printf("TEST 10: Large file read Success \n");
+	// close(fd);	
 
 
 	printf("Benchmark completed \n");

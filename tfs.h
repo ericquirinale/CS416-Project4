@@ -1,10 +1,12 @@
 /*
  *  Copyright (C) 2021 CS416 Rutgers CS
  *	Tiny File System
- *
- *	File:	tfs.h
- *
+ *	File:	tfs.c
+ *	Kunal Thakker - kdt57
+ *	Bryan Law - bpl52
+ *	Tested on: kill.cs.rutgers.edu
  */
+
 
 #include <linux/limits.h>
 #include <sys/stat.h>
