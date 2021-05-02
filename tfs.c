@@ -23,6 +23,7 @@
 
 #include "block.h"
 #include "tfs.h"
+#include <pthread.h>
 
 char diskfile_path[PATH_MAX];
 
@@ -38,6 +39,7 @@ struct superblock* sb;
 int inodes_per_block=(int)(BLOCK_SIZE/sizeof(struct inode));
 int inode_start_block=3;
 int isInit=0;
+pthread_mutex_t lock;
 
 /* 
  * Get available inode number from bitmap
@@ -452,7 +454,7 @@ int get_node_by_path(const char *path, uint16_t ino, struct inode *inode) {
  * Make file system
  */
 int tfs_mkfs() {
-
+	pthread_mutex_lock(&lock);
 	// Call dev_init() to initialize (Create) Diskfile
 	dev_init(diskfile_path);
 	dev_open(diskfile_path);
@@ -502,6 +504,7 @@ int tfs_mkfs() {
 	// bio_write(4,(void*)(root_inode));
 	writei(0,root_inode);
 	printf("End\n");
+	pthread_mutex_unlock(&lock);
 	return 0;
 }
 
@@ -510,6 +513,7 @@ int tfs_mkfs() {
  * FUSE file operations
  */
 static void *tfs_init(struct fuse_conn_info *conn) {
+	pthread_mutex_lock(&lock);
 	printf("Init\n");
 	// Step 1a: If disk file is not found, call mkfs
 	int open=dev_open(diskfile_path);
@@ -517,6 +521,7 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 	inodes_per_block=BLOCK_SIZE/sizeof(struct inode);
 	if(open==-1){
 		tfs_mkfs();
+		pthread_mutex_unlock(&lock);
 	}
 	else{
 		sb= (struct superblock*) malloc(BLOCK_SIZE);
@@ -530,10 +535,12 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 		// int data_success=bio_read(2,data_bm_node);
 		if(sb_success<0||inode_success<0||data_success<0){
 			printf("Couldn't find superblock or bitmap nodes\n");
+			pthread_mutex_unlock(&lock);
 			return NULL;
 		}
 		else{
 			printf("Everything found!\n");
+			pthread_mutex_unlock(&lock);
 		}
 		// dev_close();
 	}
@@ -549,7 +556,9 @@ static void *tfs_init(struct fuse_conn_info *conn) {
 static void tfs_destroy(void *userdata) {
 	// printf("In destroy?\n")
 	// Step 1: De-allocate in-memory data structures
+	pthread_mutex_lock(&lock);
 	dev_close();
+	pthread_mutex_unlock(&lock);
 	// Step 2: Close diskfile
 
 }
@@ -557,6 +566,7 @@ static void tfs_destroy(void *userdata) {
 static int tfs_getattr(const char *path, struct stat *stbuf) {
 	// return -1;
 	// Step 1: call get_node_by_path() to get inode from path
+	pthread_mutex_lock(&lock);
 	start();
 	struct inode* inode=malloc(sizeof(struct inode));
 	int ret=get_node_by_path(path,0,inode);
@@ -577,11 +587,13 @@ static int tfs_getattr(const char *path, struct stat *stbuf) {
 	// stbuf->st_nlink  = 2;
 	// time(&stbuf->st_mtime);
 	end();
+	pthread_mutex_unlock(&lock);
 	return 0;
 }
 
 static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 	printf("Inside opendir\n");
+	pthread_mutex_lock(&lock);
 	start();
 
 	// Step 1: Call get_node_by_path() to get inode from path
@@ -595,10 +607,12 @@ static int tfs_opendir(const char *path, struct fuse_file_info *fi) {
 	// Step 2: If not find, return -1
 	free(node);
 	end();
+	pthread_mutex_unlock(&lock);
 	return 0;
 }
 
 static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+	pthread_mutex_lock(&lock);
 	printf("INSIDE READDIR\n");
 	// return 0;
 	start();
@@ -609,11 +623,13 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 	if(ret < 0){
 		printf("No directory with path\n");
 		end();
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	if(node->type!=DIRECTORY){
 		printf("Path is not a directory\n");
 		end();
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 
@@ -639,6 +655,7 @@ static int tfs_readdir(const char *path, void *buffer, fuse_fill_dir_t filler, o
 	end();
 	free(currentBlock);
 	printf("Finished readdir\n");
+	pthread_mutex_unlock(&lock);
 	return 0;
 }
 
@@ -700,12 +717,15 @@ static int tfs_mkdir(const char *path, mode_t mode) {
 	set_bitmap(inode_bm,new_inode->ino);
 	// Step 6: Call writei() to write inode to disk
 	writei(avail_ino, new_inode);
-
+	
+	pthread_mutex_init(&lock, NULL);
 	end();
+	
 	return 0;
 }
 
 static int tfs_rmdir(const char *path) {
+	pthread_mutex_lock(&lock);
 	printf("Inside tfs_rmdir\n");
 	start();
 	char* dirc = malloc(strlen(path)+1);
@@ -720,6 +740,7 @@ static int tfs_rmdir(const char *path) {
 		printf("No directory with this path\n");
 		free(parentInode);
 		end();
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	struct dirent* targetDirent=malloc(sizeof(struct dirent));
@@ -727,6 +748,7 @@ static int tfs_rmdir(const char *path) {
 	if(x<0){
 		printf("Could not find directory?\n");
 		end();
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	struct inode* targetInode=malloc(sizeof(struct inode));
@@ -738,6 +760,7 @@ static int tfs_rmdir(const char *path) {
 			free(targetDirent);
 			free(parentInode);
 			end();
+			pthread_mutex_unlock(&lock);
 			return -1;
 		}
 	}
@@ -746,6 +769,7 @@ static int tfs_rmdir(const char *path) {
 	unset_bitmap(inode_bm,targetInode->ino);
 	end();
 	printf("Removed successfully\n");
+	pthread_mutex_unlock(&lock);
 	return 0;
 	// Step 1: Use dirname() and basename() to separate parent directory path and target directory name
 
@@ -767,6 +791,7 @@ static int tfs_releasedir(const char *path, struct fuse_file_info *fi) {
 }
 
 static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) {
+	pthread_mutex_lock(&lock);
 	printf("Inside tfs_create\n");
 	start();
 
@@ -787,6 +812,7 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	if(parent_ino == -1){
 		printf("Directory does not exist\n");
 		end();
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 
@@ -813,6 +839,7 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 		printf("File already exists\n");
 		free(temp);
 		end();
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	free(temp);
@@ -820,6 +847,7 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	if(dir_ret < 0){
 		printf("Error adding new directory");
 		end();
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 
@@ -829,10 +857,12 @@ static int tfs_create(const char *path, mode_t mode, struct fuse_file_info *fi) 
 	// Step 6: Call writei() to write inode to disk
 	writei(avail_ino, new_inode);
 	end();
+	pthread_mutex_unlock(&lock);
 	return 0;
 }
 
 static int tfs_open(const char *path, struct fuse_file_info *fi) {
+	pthread_mutex_lock(&lock);
 	printf("Inside tfs_open\n");
 	start();
 	// Step 1: Call get_node_by_path() to get inode from path
@@ -840,14 +870,17 @@ static int tfs_open(const char *path, struct fuse_file_info *fi) {
 	int ret=get_node_by_path(path,0,inode);
 	free(inode);
 	if(ret==-1){
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	// Step 2: If not find, return -1
 	end();
+	pthread_mutex_unlock(&lock);
 	return 0;
 }
 
 static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
+	pthread_mutex_lock(&lock);
     printf("Inside tfs_read\n");
     // Step 1: You could call get_node_by_path() to get inode from path
     start();
@@ -856,6 +889,7 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
     if(inode_ino == -1){
         printf("Directory does not exist\n");
         end();
+	   pthread_mutex_unlock(&lock);
         return -1;
     }
 
@@ -873,9 +907,10 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
     for(int i=block_num; i<block_num+total_blocks; i++){
         if(inode->direct_ptr[i]==-1){
             printf("Error reading from memory\n");
+		  pthread_mutex_unlock(&lock);
             return -1;
         }
-        }
+	}
 
     // Step 3: copy the correct amount of data from offset to buffer
     int bytes_left = size;
@@ -895,17 +930,21 @@ static int tfs_read(const char *path, char *buffer, size_t size, off_t offset, s
 
     // Note: this function should return the amount of bytes you copied to buffer
     end();
+    pthread_mutex_unlock(&lock);
     return size;
 }
 
 static int tfs_write(const char *path, const char *buffer, size_t size, off_t offset, struct fuse_file_info *fi) {
+	pthread_mutex_lock(&lock);
 	printf("Inside tfs_write\n");
 	start();
 	if(size==0){
+		pthread_mutex_unlock(&lock);
 		return 0;
 	}
 	if(size+offset>16*BLOCK_SIZE){
 		printf("Offset/size is too large\n");
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	struct inode* inode=malloc(sizeof(struct inode));
@@ -913,11 +952,13 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 	if(found==-1){
 		printf("No file found with this path\n");
 		free(inode);
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	if(inode->type==DIRECTORY){
 		printf("Given path is for a directory\n");
 		free(inode);
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	int bytesRead=0;
@@ -940,6 +981,7 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 				printf("Error: Not enough memory left on disk\n");
 				free(currentBlock);
 				free(inode);
+				pthread_mutex_unlock(&lock);
 				return -1;
 			}
 			else{
@@ -971,10 +1013,12 @@ static int tfs_write(const char *path, const char *buffer, size_t size, off_t of
 
 	// Note: this function should return the amount of bytes you write to disk
 	end();
+	pthread_mutex_unlock(&lock);
 	return size;
 }
 
 static int tfs_unlink(const char *path) {
+	pthread_mutex_lock(&lock);
 	printf("Inside tfs_unlink\n");
 
 	start();
@@ -989,6 +1033,7 @@ static int tfs_unlink(const char *path) {
 	if(ret==-1){
 		printf("No file with this path");
 		free(parentInode);
+		pthread_mutex_unlock(&lock);
 		return -1;
 	}
 	struct dirent* targetDirent=malloc(sizeof(struct dirent));
@@ -1005,6 +1050,7 @@ static int tfs_unlink(const char *path) {
 	unset_bitmap(inode_bm,targetInode->ino);
 	end();
 	printf("Removed successfully");
+	pthread_mutex_unlock(&lock);
 	return 0;
 
 	// Step 1: Use dirname() and basename() to separate parent directory path and target file name

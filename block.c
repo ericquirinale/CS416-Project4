@@ -21,6 +21,7 @@
 #define DISK_SIZE	32*1024*1024
 
 int diskfile = -1;
+pthread_mutex_t lock;
 
 //Creates a file which is your new emulated disk
 void dev_init(const char* diskfile_path) {
