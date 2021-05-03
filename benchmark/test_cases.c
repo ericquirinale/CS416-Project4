@@ -7,6 +7,7 @@
 #include <string.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <time.h>
 
 /* You need to change this macro to your TFS mount point*/
 #define TESTDIR "/tmp/bpl52/mountdir"
@@ -22,6 +23,7 @@
 char buf[BLOCKSIZE];
 
 int main(int argc, char **argv) {
+	clock_t begin = clock();
 
 	int i, fd = 0, ret = 0;
 	struct stat st;
@@ -211,5 +213,9 @@ int main(int argc, char **argv) {
 
 
 	printf("Benchmark completed \n");
+	clock_t end = clock();
+    	double time = (double) (end-begin)/CLOCKS_PER_SEC;
+
+    	printf("Time to complete: %f seconds\n", time);
 	return 0;
 }

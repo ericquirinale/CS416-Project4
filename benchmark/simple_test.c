@@ -7,9 +7,9 @@
 #include <string.h>
 #include <sys/types.h>
 #include <dirent.h>
-
+#include <time.h>
 /* You need to change this macro to your TFS mount point*/
-#define TESTDIR "/tmp/kdt57/mountdir"
+#define TESTDIR "/tmp/bpl52/mountdir"
 
 #define N_FILES 100
 #define BLOCKSIZE 4096
@@ -21,7 +21,7 @@
 char buf[BLOCKSIZE];
 
 int main(int argc, char **argv) {
-
+	clock_t begin = clock();
 	int i, fd = 0, ret = 0;
 	struct stat st;
 
@@ -65,7 +65,6 @@ int main(int argc, char **argv) {
 		perror("open");
 		exit(1);
 	}
-	printf("test\n");
 
 	/* Perform sequential reading */
 	for (i = 0; i < ITERS; i++) {
@@ -110,7 +109,6 @@ int main(int argc, char **argv) {
 	
 	/* Sub-directory creation test */
 	for (i = 0; i < N_FILES; ++i) {
-		printf("RUN: %d\n", i);
 		char subdir_path[FSPATHLEN];
 		memset(subdir_path, 0, FSPATHLEN);
 
@@ -137,5 +135,9 @@ int main(int argc, char **argv) {
 	printf("TEST 7: Sub-directory create success \n");
 
 	printf("Benchmark completed \n");
+	clock_t end = clock();
+    	double time = (double) (end-begin)/CLOCKS_PER_SEC;
+
+    	printf("Time to complete: %f seconds\n", time);
 	return 0;
 }

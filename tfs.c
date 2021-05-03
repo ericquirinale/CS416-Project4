@@ -87,12 +87,12 @@ int get_avail_blkno() {
  */
 int readi(uint16_t ino, struct inode *inode) {
 
-  // Step 1: Get the inode's on-disk block number
+  	// Step 1: Get the inode's on-disk block number
 	int onDiskBM=(ino/inodes_per_block)+inode_start_block;
-  // Step 2: Get offset of the inode in the inode on-disk block
+  	// Step 2: Get offset of the inode in the inode on-disk block
 	int offset=ino%inodes_per_block;
 
-  // Step 3: Read the block from disk and then copy into inode structure
+  	// Step 3: Read the block from disk and then copy into inode structure
 
 	struct inode* data=malloc(BLOCK_SIZE);
 	bio_read(onDiskBM,data);
@@ -105,7 +105,7 @@ int readi(uint16_t ino, struct inode *inode) {
 	return 0;
 }
 
-int writei(uint16_t ino, struct inode *inode) {
+int writei(uint16_t ino, struct inode	 *inode) {
 
 	// Step 1: Get the block number where this inode resides on disk
 	// printf("Before 110\n");
@@ -138,11 +138,11 @@ int writei(uint16_t ino, struct inode *inode) {
  */
 int dir_find(uint16_t ino, const char *fname, size_t name_len, struct dirent *dirent) {
 
-  // Step 1: Call readi() to get the inode using ino (inode number of current directory)
+  	// Step 1: Call readi() to get the inode using ino (inode number of current directory)
 
-  // Step 2: Get data block of current directory from inode
+  	// Step 2: Get data block of current directory from inode
 
-  // Step 3: Read directory's data block and check each directory entry.
+  	// Step 3: Read directory's data block and check each directory entry.
 	printf("Inside dir_find\n");
 	struct inode* root=malloc(sizeof(struct inode));
 	struct dirent* temp_dirent;
